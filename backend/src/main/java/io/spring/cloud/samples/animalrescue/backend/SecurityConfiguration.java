@@ -25,7 +25,6 @@ public class SecurityConfiguration {
 		if (cfEnv.isInCf()) {
 			String authDomain = cfEnv.findCredentialsByLabel("p.gateway").getString("auth_domain");
 			if (authDomain != null) {
-				LOG.info("not in cf");
 				httpSecurity.oauth2ResourceServer()
 					.jwt().jwkSetUri(authDomain + "/token_keys");
 			}
@@ -36,14 +35,14 @@ public class SecurityConfiguration {
 			.httpBasic().disable()
 			.csrf().disable()
 			.authorizeExchange()
-			.pathMatchers("/animals", "/actuators/**").permitAll()
-			.and()
+				.pathMatchers("/animals", "/actuators/**").permitAll()
+				.and()
 			.authorizeExchange()
-			.anyExchange().authenticated()
-			.and()
+				.anyExchange().authenticated()
+				.and()
 			.oauth2ResourceServer()
-			.jwt()
-			.and()
+				.jwt()
+				.and()
 			.and()
 			.build();
 		// @formatter:on

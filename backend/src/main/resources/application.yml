@@ -14,4 +14,4 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          jwk-set-uri: http://localhost:8080/token_keys
+          jwk-set-uri: http://localhost:8080/uaa/token_keys

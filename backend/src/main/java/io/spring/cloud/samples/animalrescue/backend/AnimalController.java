@@ -1,14 +1,17 @@
 package io.spring.cloud.samples.animalrescue.backend;
 
-import java.security.Principal;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -32,96 +35,122 @@ public class AnimalController {
 	}
 
 	@GetMapping("/whoami")
-	public String whoami(Principal principal) {
-		return getUserName(principal);
+	public Mono<String> whoami() {
+		return ReactiveSecurityContextHolder
+			.getContext()
+			.map(SecurityContext::getAuthentication)
+			.map(this::getUserName);
 	}
 
 	@GetMapping("/animals")
-	public Iterable<Animal> getAllAnimals() {
+	public Flux<Animal> getAllAnimals() {
 		LOGGER.info("Received get all animals request");
-		return animalRepository.findAll();
+		return Flux.fromIterable(animalRepository.findAll());
 	}
 
 	@PostMapping("/animals/{id}/adoption-requests")
 	@ResponseStatus(HttpStatus.CREATED)
-	public void submitAdoptionRequest(
-		Principal principal,
+	public Mono<Void> submitAdoptionRequest(
 		@PathVariable("id") Long animalId,
 		@RequestBody AdoptionRequest adoptionRequest
 	) {
-		LOGGER.info("Received submit adoption request from {}", getUserName(principal));
-		Animal animal = animalRepository
-			.findById(animalId)
-			.orElseThrow(() ->
-				new IllegalArgumentException(String.format("Animal with id %s doesn't exist!", animalId)));
+		return ReactiveSecurityContextHolder
+			.getContext()
+			.map(SecurityContext::getAuthentication)
+			.flatMap(authentication -> {
+				LOGGER.info("Received submit adoption request from {}",
+					getUserName(authentication));
+				Animal animal = animalRepository
+					.findById(animalId)
+					.orElseThrow(() ->
+						new IllegalArgumentException(String.format("Animal with id %s doesn't exist!", animalId)));
 
-		adoptionRequest.setAdopterName(getUserName(principal));
-		animal.getAdoptionRequests().add(adoptionRequest);
-		animalRepository.save(animal);
+				adoptionRequest.setAdopterName(getUserName(authentication));
+				animal.getAdoptionRequests().add(adoptionRequest);
+				animalRepository.save(animal);
+
+				return Mono.empty();
+			});
 	}
 
 	@PutMapping("/animals/{animalId}/adoption-requests/{adoptionRequestId}")
-	public void editAdoptionRequest(
-		Principal principal,
+	public Mono<Void> editAdoptionRequest(
 		@PathVariable("animalId") Long animalId,
 		@PathVariable("adoptionRequestId") Long adoptionRequestId,
 		@RequestBody AdoptionRequest adoptionRequest
 	) {
-		LOGGER.info("Received edit adoption request");
-		Animal animal = animalRepository
-			.findById(animalId)
-			.orElseThrow(() ->
-				new IllegalArgumentException(String.format("Animal with id %s doesn't exist!", animalId)));
+		return ReactiveSecurityContextHolder
+			.getContext()
+			.map(SecurityContext::getAuthentication)
+			.flatMap(authentication -> {
+				LOGGER.info("Received edit adoption request");
+				Animal animal = animalRepository
+					.findById(animalId)
+					.orElseThrow(() ->
+						new IllegalArgumentException(
+							String.format("Animal with id %s doesn't exist!", animalId)));
 
-		AdoptionRequest existing = animal
-			.getAdoptionRequests()
-			.stream()
-			.filter(ar -> ar.getId().equals(adoptionRequestId))
-			.findAny()
-			.orElseThrow(
-				() -> new IllegalArgumentException(String.format("AdoptionRequest with id %s doesn't exist!",
-					adoptionRequestId)));
+				AdoptionRequest existing = animal
+					.getAdoptionRequests()
+					.stream()
+					.filter(ar -> ar.getId().equals(adoptionRequestId))
+					.findAny()
+					.orElseThrow(
+						() -> new IllegalArgumentException(
+							String.format("AdoptionRequest with id %s doesn't exist!",
+								adoptionRequestId)));
 
 
-		if (!existing.getAdopterName().equals(getUserName(principal))) {
-			throw new AccessDeniedException(String.format("User %s has cannot edit user %s's adoption request",
-					getUserName(principal), existing.getAdopterName()));
-		}
+				if (!existing.getAdopterName().equals(getUserName(authentication))) {
+					throw new AccessDeniedException(
+						String.format("User %s has cannot edit user %s's adoption request",
+							getUserName(authentication), existing.getAdopterName()));
+				}
 
-		existing.setEmail(adoptionRequest.getEmail());
-		existing.setNotes(adoptionRequest.getNotes());
+				existing.setEmail(adoptionRequest.getEmail());
+				existing.setNotes(adoptionRequest.getNotes());
 
-		animalRepository.save(animal);
+				animalRepository.save(animal);
+				return Mono.empty();
+			});
 	}
 
 	@DeleteMapping("/animals/{animalId}/adoption-requests/{adoptionRequestId}")
-	public void deleteAdoptionRequest(
-		Principal principal,
+	public Mono<Void> deleteAdoptionRequest(
 		@PathVariable("animalId") Long animalId,
 		@PathVariable("adoptionRequestId") Long adoptionRequestId
 	) {
-		LOGGER.info("Received delete adoption request from {}", getUserName(principal));
-		Animal animal = animalRepository
-			.findById(animalId)
-			.orElseThrow(() ->
-				new IllegalArgumentException(String.format("Animal with id %s doesn't exist!", animalId)));
+		return ReactiveSecurityContextHolder
+			.getContext()
+			.map(SecurityContext::getAuthentication)
+			.flatMap(authentication -> {
+				LOGGER.info("Received delete adoption request from {}", getUserName(authentication));
+				Animal animal = animalRepository
+					.findById(animalId)
+					.orElseThrow(() ->
+						new IllegalArgumentException(
+							String.format("Animal with id %s doesn't exist!", animalId)));
 
-		AdoptionRequest existing = animal
-			.getAdoptionRequests()
-			.stream()
-			.filter(ar -> ar.getId().equals(adoptionRequestId))
-			.findAny()
-			.orElseThrow(
-				() -> new IllegalArgumentException(String.format("AdoptionRequest with id %s doesn't exist!",
-					adoptionRequestId)));
+				AdoptionRequest existing = animal
+					.getAdoptionRequests()
+					.stream()
+					.filter(ar -> ar.getId().equals(adoptionRequestId))
+					.findAny()
+					.orElseThrow(
+						() -> new IllegalArgumentException(
+							String.format("AdoptionRequest with id %s doesn't exist!",
+								adoptionRequestId)));
 
-		if (!existing.getAdopterName().equals(getUserName(principal))) {
-			throw new AccessDeniedException(String.format("User %s has cannot delete user %s's adoption request",
-					getUserName(principal), existing.getAdopterName()));
-		}
+				if (!existing.getAdopterName().equals(getUserName(authentication))) {
+					throw new AccessDeniedException(
+						String.format("User %s has cannot delete user %s's adoption request",
+							getUserName(authentication), existing.getAdopterName()));
+				}
 
-		animal.getAdoptionRequests().remove(existing);
-		animalRepository.save(animal);
+				animal.getAdoptionRequests().remove(existing);
+				animalRepository.save(animal);
+				return Mono.empty();
+			});
 	}
 
 	@ExceptionHandler({AccessDeniedException.class})
@@ -129,12 +158,14 @@ public class AnimalController {
 		return new ResponseEntity<>(e.getMessage(), new HttpHeaders(), HttpStatus.FORBIDDEN);
 	}
 
-	private String getUserName(Principal principal) {
-		if (principal instanceof JwtAuthenticationToken) {
-			return ((JwtAuthenticationToken) principal).getTokenAttributes().get("user_name").toString();
+	private String getUserName(Authentication authentication) {
+		LOGGER.info("getUserName from " + authentication);
+		if (authentication instanceof JwtAuthenticationToken) {
+			return ((JwtAuthenticationToken) authentication).getTokenAttributes().get("user_name")
+				.toString();
 		}
 		else {
-			return principal.getName();
+			return authentication.getName();
 		}
 	}
 }
